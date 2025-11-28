@@ -1,0 +1,9 @@
+{
+  "name": "Project F.R.I.D.A.Y.",
+  "description": "受到钢铁侠“星期五”启发的自主语音激活 AI 界面，利用 Gemini Live API 进行实时多模态感知。",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

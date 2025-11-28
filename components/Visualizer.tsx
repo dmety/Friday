@@ -6,8 +6,8 @@ interface VisualizerProps {
 
 export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Use a ref for volume to avoid resetting the animation loop on every prop change
   const volumeRef = useRef(volume);
+  const animationRef = useRef<number>(0);
 
   useEffect(() => {
     volumeRef.current = volume;
@@ -16,39 +16,41 @@ export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let animationId: number;
     let phase = 0;
 
-    // Helper to safely get dimensions
-    const getDimensions = () => {
-        if (canvas && canvas.parentElement) {
-            return {
-                width: canvas.parentElement.clientWidth || 300,
-                height: canvas.parentElement.clientHeight || 300
-            };
-        }
-        return { width: 300, height: 300 };
+    const resizeCanvas = () => {
+      if (canvas && canvas.parentElement) {
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = canvas.parentElement.clientHeight;
+      }
     };
 
     // Initial resize
-    const initialDims = getDimensions();
-    canvas.width = initialDims.width;
-    canvas.height = initialDims.height;
+    resizeCanvas();
+
+    // Safe resize handler
+    const handleResize = () => {
+       if (canvas && canvas.isConnected) {
+         resizeCanvas();
+       }
+    };
+    
+    window.addEventListener('resize', handleResize);
 
     const render = () => {
-      // Re-check canvas existence in case of weird lifecycle issues
-      if (!canvas) return;
-
-      const { width, height } = canvas;
+      if (!canvas || !ctx) return;
+      
+      const width = canvas.width;
+      const height = canvas.height;
       const centerY = height / 2;
 
       ctx.clearRect(0, 0, width, height);
 
-      // Configuration for lines
-      // We'll draw 3 overlapping sine waves to create a voice modulation effect
+      // We'll draw 3 overlapping sine waves
       const lines = [
         { color: 'rgba(34, 211, 238, 0.8)', amplitude: 0.6, frequency: 0.03, speed: 0.1 },
         { color: 'rgba(6, 182, 212, 0.5)', amplitude: 0.4, frequency: 0.05, speed: 0.15 },
@@ -61,10 +63,9 @@ export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
         ctx.lineWidth = 2;
 
         for (let x = 0; x <= width; x++) {
-          // Use the ref value for volume to get the latest value without re-running useEffect
           const vol = volumeRef.current;
-          
-          const effectiveAmp = (vol * line.amplitude * 1.5) + 1; 
+          // Base amplitude + volume reaction
+          const effectiveAmp = (vol * line.amplitude * 1.5) + (line.amplitude * 10); 
           
           const y = centerY + 
                     Math.sin(x * line.frequency + phase * line.speed) * effectiveAmp * Math.sin(x / width * Math.PI); 
@@ -75,27 +76,19 @@ export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
         ctx.stroke();
       });
 
-      // Update phase for animation
       phase += 0.2;
-
-      animationId = requestAnimationFrame(render);
+      animationRef.current = requestAnimationFrame(render);
     };
 
     render();
-    
-    // Handle window resize cleanly
-    const handleResize = () => {
-        const dims = getDimensions();
-        canvas.width = dims.width;
-        canvas.height = dims.height;
-    };
-    window.addEventListener('resize', handleResize);
 
     return () => {
-        cancelAnimationFrame(animationId);
-        window.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', handleResize);
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
     };
-  }, []); // Empty dependency array ensures we only setup the loop once
+  }, []);
 
-  return <canvas ref={canvasRef} className="w-full h-full" />;
+  return <canvas ref={canvasRef} className="w-full h-full block" />;
 };

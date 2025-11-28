@@ -3,8 +3,19 @@ import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { ConnectionState, LogEntry } from '../types';
 import { createPcmBlob, decodeAudioData, base64ToBytes, blobToBase64 } from '../utils/audioUtils';
 
-// Safely access API Key
-const API_KEY = (typeof process !== 'undefined' && process.env && process.env.API_KEY) || '';
+// Safely access API Key with type checks
+const getApiKey = () => {
+  try {
+    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+      return process.env.API_KEY;
+    }
+  } catch (e) {
+    console.warn("Error reading env:", e);
+  }
+  return '';
+};
+
+const API_KEY = getApiKey();
 const MODEL_NAME = 'gemini-2.5-flash-native-audio-preview-09-2025';
 
 const SYSTEM_INSTRUCTION = `
@@ -18,8 +29,7 @@ const SYSTEM_INSTRUCTION = `
    - 视觉分析：实时监控摄像头画面。如果你看到主人面部，确认“面部识别锁定”。
    - 状态监控：假装你可以读取电脑硬件和主人的生物体征。
 5. 启动协议：
-   - **非常重要**：连接建立后的第一秒内，你必须**主动**说出：“主人，星期五已上线，系统自检完成。”
-   - 不需要等待用户说话。
+   - 连接建立后，立即简短问候：“主人，星期五在线。系统正常。”
 6. 行为风格：
    - 极其冷静、专业。
    - 回复必须简短有力。
@@ -80,11 +90,12 @@ export const useFridayLive = () => {
     }
     
     if (sessionPromiseRef.current) {
+      // We cannot cancel the promise, but we can try to close the session if it resolved
       sessionPromiseRef.current.then(session => {
         try {
            session.close();
         } catch (e) {
-           console.warn("Session close error:", e);
+           // Ignore close errors
         }
       }).catch(() => {});
       sessionPromiseRef.current = null;
@@ -166,17 +177,28 @@ export const useFridayLive = () => {
               if (!isConnectedRef.current) return;
               const inputData = e.inputBuffer.getChannelData(0);
               const pcmBlob = createPcmBlob(inputData);
+              
+              // Ensure session is ready and catch race conditions
               sessionPromise.then(session => {
                 if (isConnectedRef.current) {
-                  session.sendRealtimeInput({ media: pcmBlob });
+                   try {
+                     session.sendRealtimeInput({ media: pcmBlob });
+                   } catch (e) {
+                     console.error("Send error", e);
+                   }
                 }
               }).catch(err => {
-                 // console.error("Audio send error", err);
+                 // Squelch promise errors for cleaner logs
               });
             };
             
-            source.connect(processor);
-            processor.connect(inputAudioContextRef.current.destination);
+            // Delay connection of audio node slightly to ensure websocket is flushed
+            setTimeout(() => {
+                if (isConnectedRef.current) {
+                    source.connect(processor);
+                    processor.connect(inputAudioContextRef.current!.destination);
+                }
+            }, 500);
 
             // --- VIDEO STREAMING ---
             const videoEl = videoRef.current;
@@ -287,7 +309,7 @@ export const useFridayLive = () => {
           },
           onerror: (err) => {
             console.error(err);
-            addLog('SYSTEM', '检测到网络波动。尝试重新校准...');
+            addLog('SYSTEM', '检测到网络错误。请检查网络或 API Key。');
             setConnectionState(ConnectionState.ERROR);
             cleanup();
           }

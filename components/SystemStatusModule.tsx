@@ -6,7 +6,7 @@ export const SystemStatusModule: React.FC = () => {
   const [stats, setStats] = useState<SystemStats>({
     batteryLevel: 100,
     isCharging: true,
-    online: navigator.onLine,
+    online: typeof navigator !== 'undefined' ? navigator.onLine : true,
     latitude: null,
     longitude: null,
     cpuLoad: 12,
@@ -21,17 +21,20 @@ export const SystemStatusModule: React.FC = () => {
   });
 
   useEffect(() => {
-    // Battery API simulation with Safety Check
+    // Battery API simulation with Strict Safety Check
     const updateBattery = async () => {
       try {
-        if ('getBattery' in navigator) {
-          const battery: any = await (navigator as any).getBattery();
-          setStats(s => ({ ...s, batteryLevel: battery.level * 100, isCharging: battery.charging }));
-          battery.addEventListener('levelchange', () => setStats(s => ({ ...s, batteryLevel: battery.level * 100 })));
+        // @ts-ignore - navigator.getBattery is not standard in all TS definitions
+        if (typeof navigator !== 'undefined' && navigator.getBattery) {
+          // @ts-ignore
+          const battery = await navigator.getBattery();
+          if (battery) {
+            setStats(s => ({ ...s, batteryLevel: battery.level * 100, isCharging: battery.charging }));
+            battery.addEventListener('levelchange', () => setStats(s => ({ ...s, batteryLevel: battery.level * 100 })));
+          }
         }
       } catch (e) { 
-        // Ignore battery API errors to prevent crash
-        console.warn("Battery status unavailable"); 
+        // Silently fail if battery API crashes
       }
     };
     updateBattery();

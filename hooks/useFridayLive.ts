@@ -3,7 +3,7 @@ import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { ConnectionState, LogEntry } from '../types';
 import { createPcmBlob, decodeAudioData, base64ToBytes, blobToBase64 } from '../utils/audioUtils';
 
-const API_KEY = "AIzaSyAr0otUagAS5q_8aAEUKhb8GP50UMcRv6A";
+const API_KEY = (typeof process !== 'undefined' && process.env && process.env.API_KEY) || '';
 const MODEL_NAME = 'gemini-2.5-flash-native-audio-preview-09-2025';
 
 const SYSTEM_INSTRUCTION = `
@@ -306,7 +306,7 @@ export const useFridayLive = () => {
     } catch (error) {
       console.error(error);
       setConnectionState(ConnectionState.ERROR);
-      addLog('SYSTEM', '初始化失败。请检查网络。');
+      addLog('SYSTEM', '初始化失败。请检查摄像头权限。');
       cleanup();
     }
   }, [addLog, cleanup, connectionState]);

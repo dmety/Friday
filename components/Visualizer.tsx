@@ -6,6 +6,12 @@ interface VisualizerProps {
 
 export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Use a ref for volume to avoid resetting the animation loop on every prop change
+  const volumeRef = useRef(volume);
+
+  useEffect(() => {
+    volumeRef.current = volume;
+  }, [volume]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -38,13 +44,13 @@ export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
         ctx.lineWidth = 2;
 
         for (let x = 0; x <= width; x++) {
-          // Use volume to scale the amplitude. 
-          // If volume is 0, the line should be flat (amplitude close to 0).
-          // We add a small base noise so it's not perfectly dead flat when silent.
-          const effectiveAmp = (volume * line.amplitude * 1.5) + 1; 
+          // Use the ref value for volume to get the latest value without re-running useEffect
+          const vol = volumeRef.current;
+          
+          const effectiveAmp = (vol * line.amplitude * 1.5) + 1; 
           
           const y = centerY + 
-                    Math.sin(x * line.frequency + phase * line.speed) * effectiveAmp * Math.sin(x / width * Math.PI); // Windowing function to taper ends
+                    Math.sin(x * line.frequency + phase * line.speed) * effectiveAmp * Math.sin(x / width * Math.PI); 
           
           if (x === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
@@ -60,7 +66,7 @@ export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
 
     render();
     return () => cancelAnimationFrame(animationId);
-  }, [volume]);
+  }, []); // Empty dependency array ensures we only setup the loop once
 
   return <canvas ref={canvasRef} className="w-full h-full" />;
 };

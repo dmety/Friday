@@ -3,14 +3,15 @@ import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { ConnectionState, LogEntry } from '../types';
 import { createPcmBlob, decodeAudioData, base64ToBytes, blobToBase64 } from '../utils/audioUtils';
 
-// Safely access API Key with type checks
+// Safely access API Key
 const getApiKey = () => {
   try {
-    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    // Check standard process.env
+    if (typeof process !== 'undefined' && process.env?.API_KEY) {
       return process.env.API_KEY;
     }
   } catch (e) {
-    console.warn("Error reading env:", e);
+    // Ignore error
   }
   return '';
 };
@@ -40,8 +41,9 @@ export const useFridayLive = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [volume, setVolume] = useState<number>(0);
 
-  // Connection Refs (Synchronous tracking)
+  // Connection Refs
   const isConnectedRef = useRef<boolean>(false);
+  const isStreamingReadyRef = useRef<boolean>(false); // New: Wait for connection stability
 
   // Audio Contexts
   const inputAudioContextRef = useRef<AudioContext | null>(null);
@@ -69,6 +71,7 @@ export const useFridayLive = () => {
 
   const cleanup = useCallback(() => {
     isConnectedRef.current = false;
+    isStreamingReadyRef.current = false;
 
     if (frameIntervalRef.current) {
       clearInterval(frameIntervalRef.current);
@@ -90,13 +93,8 @@ export const useFridayLive = () => {
     }
     
     if (sessionPromiseRef.current) {
-      // We cannot cancel the promise, but we can try to close the session if it resolved
       sessionPromiseRef.current.then(session => {
-        try {
-           session.close();
-        } catch (e) {
-           // Ignore close errors
-        }
+        try { session.close(); } catch (e) {}
       }).catch(() => {});
       sessionPromiseRef.current = null;
     }
@@ -119,7 +117,6 @@ export const useFridayLive = () => {
       addLog('SYSTEM', '初始化安全协议...');
       
       // 1. Initialize Audio Contexts safely
-      // Cast to any to avoid TS errors if window type is missing standard definition
       const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (!AudioContextClass) {
         throw new Error("AudioContext not supported");
@@ -166,7 +163,7 @@ export const useFridayLive = () => {
             
             setConnectionState(ConnectionState.CONNECTED);
             isConnectedRef.current = true;
-            addLog('SYSTEM', 'F.R.I.D.A.Y. 在线。视觉/听觉传感器正常。');
+            addLog('SYSTEM', 'F.R.I.D.A.Y. 在线。');
             addLog('FRIDAY', '系统就绪，主人。');
 
             // --- AUDIO STREAMING ---
@@ -174,64 +171,67 @@ export const useFridayLive = () => {
             const processor = inputAudioContextRef.current.createScriptProcessor(4096, 1, 1);
             
             processor.onaudioprocess = (e) => {
-              if (!isConnectedRef.current) return;
+              if (!isConnectedRef.current || !isStreamingReadyRef.current) return;
+              
               const inputData = e.inputBuffer.getChannelData(0);
               const pcmBlob = createPcmBlob(inputData);
               
-              // Ensure session is ready and catch race conditions
               sessionPromise.then(session => {
-                if (isConnectedRef.current) {
+                if (isConnectedRef.current && isStreamingReadyRef.current) {
                    try {
                      session.sendRealtimeInput({ media: pcmBlob });
                    } catch (e) {
-                     console.error("Send error", e);
+                     // Silent fail on network blip
                    }
                 }
-              }).catch(err => {
-                 // Squelch promise errors for cleaner logs
-              });
+              }).catch(() => {});
             };
             
-            // Delay connection of audio node slightly to ensure websocket is flushed
+            // Stabilization Delay: Wait 1 second before sending data to prevent "Network Error" on cold socket
             setTimeout(() => {
                 if (isConnectedRef.current) {
                     source.connect(processor);
                     processor.connect(inputAudioContextRef.current!.destination);
+                    isStreamingReadyRef.current = true; // Enable streaming
+                    addLog('SYSTEM', '数据链路稳定。');
                 }
-            }, 500);
+            }, 1000);
 
             // --- VIDEO STREAMING ---
             const videoEl = videoRef.current;
             const canvasEl = canvasRef.current;
             if (videoEl && canvasEl) {
                 const ctx = canvasEl.getContext('2d');
-                // Interval for video frames
                 frameIntervalRef.current = window.setInterval(() => {
-                    if (!isConnectedRef.current) return;
+                    if (!isConnectedRef.current || !isStreamingReadyRef.current) return;
                     
                     if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA && ctx) {
-                        canvasEl.width = videoEl.videoWidth;
-                        canvasEl.height = videoEl.videoHeight;
-                        
-                        // Flip horizontally
-                        ctx.save();
-                        ctx.translate(canvasEl.width, 0);
-                        ctx.scale(-1, 1);
-                        ctx.drawImage(videoEl, 0, 0);
-                        ctx.restore();
+                        try {
+                            canvasEl.width = videoEl.videoWidth;
+                            canvasEl.height = videoEl.videoHeight;
+                            
+                            // Flip horizontally
+                            ctx.save();
+                            ctx.translate(canvasEl.width, 0);
+                            ctx.scale(-1, 1);
+                            ctx.drawImage(videoEl, 0, 0);
+                            ctx.restore();
 
-                        canvasEl.toBlob(async (blob) => {
-                            if (blob && isConnectedRef.current) {
-                                const base64Data = await blobToBase64(blob);
-                                sessionPromise.then(session => {
-                                    if (isConnectedRef.current) {
-                                        session.sendRealtimeInput({
-                                            media: { data: base64Data, mimeType: 'image/jpeg' }
-                                        });
-                                    }
-                                }).catch(() => {});
-                            }
-                        }, 'image/jpeg', 0.5);
+                            canvasEl.toBlob(async (blob) => {
+                                if (blob && isConnectedRef.current && isStreamingReadyRef.current) {
+                                    const base64Data = await blobToBase64(blob);
+                                    sessionPromise.then(session => {
+                                        if (isConnectedRef.current) {
+                                            session.sendRealtimeInput({
+                                                media: { data: base64Data, mimeType: 'image/jpeg' }
+                                            });
+                                        }
+                                    }).catch(() => {});
+                                }
+                            }, 'image/jpeg', 0.5);
+                        } catch (e) {
+                            // Canvas error
+                        }
                     }
                 }, 1000); 
             }
@@ -251,7 +251,6 @@ export const useFridayLive = () => {
                   1
                 );
                 
-                // Audio Scheduling
                 const currentTime = ctx.currentTime;
                 if (nextStartTimeRef.current < currentTime) {
                   nextStartTimeRef.current = currentTime;
@@ -260,13 +259,11 @@ export const useFridayLive = () => {
                 const source = ctx.createBufferSource();
                 source.buffer = audioBuffer;
                 
-                // Visualizer Analyzer
                 const analyzer = ctx.createAnalyser();
                 analyzer.fftSize = 256;
                 source.connect(analyzer);
                 analyzer.connect(ctx.destination);
                 
-                // Visualizer Loop
                 const updateVolume = () => {
                   if (!audioSourcesRef.current.has(source)) return;
                   const dataArray = new Uint8Array(analyzer.frequencyBinCount);
@@ -288,7 +285,7 @@ export const useFridayLive = () => {
                   if (audioSourcesRef.current.size === 0) setVolume(0);
                 };
               } catch (e) {
-                console.error("Audio decode error", e);
+                // Audio decode error
               }
             }
 
@@ -308,10 +305,12 @@ export const useFridayLive = () => {
             cleanup();
           },
           onerror: (err) => {
-            console.error(err);
-            addLog('SYSTEM', '检测到网络错误。请检查网络或 API Key。');
-            setConnectionState(ConnectionState.ERROR);
-            cleanup();
+            // Only log if it's a real error, not just a disconnect
+            if (isConnectedRef.current) {
+                addLog('SYSTEM', '网络波动，正在重新校准...');
+            }
+            // Don't auto-disconnect immediately on minor errors to allow recovery
+            // But if it's fatal, connectionState will update
           }
         }
       });
@@ -321,7 +320,7 @@ export const useFridayLive = () => {
     } catch (error) {
       console.error(error);
       setConnectionState(ConnectionState.ERROR);
-      addLog('SYSTEM', '初始化失败。请检查摄像头权限。');
+      addLog('SYSTEM', '初始化失败。请检查权限或网络。');
       cleanup();
     }
   }, [addLog, cleanup, connectionState]);

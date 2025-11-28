@@ -6,6 +6,7 @@ interface VisualizerProps {
 
 export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const volumeRef = useRef(volume);
   const animationRef = useRef<number>(0);
 
@@ -15,31 +16,25 @@ export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
     
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     let phase = 0;
 
-    const resizeCanvas = () => {
-      if (canvas && canvas.parentElement) {
-        canvas.width = canvas.parentElement.clientWidth;
-        canvas.height = canvas.parentElement.clientHeight;
+    // Use ResizeObserver for robust sizing without crashing
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target === container) {
+            canvas.width = entry.contentRect.width;
+            canvas.height = entry.contentRect.height;
+        }
       }
-    };
+    });
 
-    // Initial resize
-    resizeCanvas();
-
-    // Safe resize handler
-    const handleResize = () => {
-       if (canvas && canvas.isConnected) {
-         resizeCanvas();
-       }
-    };
-    
-    window.addEventListener('resize', handleResize);
+    resizeObserver.observe(container);
 
     const render = () => {
       if (!canvas || !ctx) return;
@@ -83,12 +78,16 @@ export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
     render();
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
     };
   }, []);
 
-  return <canvas ref={canvasRef} className="w-full h-full block" />;
+  return (
+    <div ref={containerRef} className="w-full h-full">
+        <canvas ref={canvasRef} className="block w-full h-full" />
+    </div>
+  );
 };

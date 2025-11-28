@@ -18,15 +18,11 @@ const SYSTEM_INSTRUCTION = `
    - 视觉分析：实时监控摄像头画面。如果你看到主人面部，确认“面部识别锁定”。
    - 状态监控：假装你可以读取电脑硬件和主人的生物体征。
 5. 启动协议：
-   - 连接建立后，系统初始化完成。你必须**立即**主动说出第一句话：“主人，星期五已上线，系统自检完成。”。
-   - 不要等待用户先说话，立刻执行上述问候。
+   - **非常重要**：连接建立后的第一秒内，你必须**主动**说出：“主人，星期五已上线，系统自检完成。”
+   - 不需要等待用户说话。
 6. 行为风格：
    - 极其冷静、专业。
    - 回复必须简短有力。
-
-示例对话：
-用户："星期五，报告状态。"
-星期五："系统运行正常，主人。CPU温度稳定。"
 `;
 
 export const useFridayLive = () => {
@@ -111,8 +107,13 @@ export const useFridayLive = () => {
       setConnectionState(ConnectionState.CONNECTING);
       addLog('SYSTEM', '初始化安全协议...');
       
-      // 1. Initialize Audio Contexts using window.AudioContext explicitly
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      // 1. Initialize Audio Contexts safely
+      // Cast to any to avoid TS errors if window type is missing standard definition
+      const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) {
+        throw new Error("AudioContext not supported");
+      }
+      
       inputAudioContextRef.current = new AudioContextClass({ sampleRate: 16000 });
       outputAudioContextRef.current = new AudioContextClass({ sampleRate: 24000 });
 

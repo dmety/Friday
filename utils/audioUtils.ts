@@ -52,7 +52,7 @@ export function createPcmBlob(data: Float32Array): GenAIBlob {
   };
 }
 
-export async function blobToBase64(blob: Blob): Promise<string> {
+export async function blobToBase64(blob: globalThis.Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {

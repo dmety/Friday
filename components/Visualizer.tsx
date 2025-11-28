@@ -22,9 +22,26 @@ export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
     let animationId: number;
     let phase = 0;
 
+    // Helper to safely get dimensions
+    const getDimensions = () => {
+        if (canvas && canvas.parentElement) {
+            return {
+                width: canvas.parentElement.clientWidth || 300,
+                height: canvas.parentElement.clientHeight || 300
+            };
+        }
+        return { width: 300, height: 300 };
+    };
+
+    // Initial resize
+    const initialDims = getDimensions();
+    canvas.width = initialDims.width;
+    canvas.height = initialDims.height;
+
     const render = () => {
-      canvas.width = canvas.parentElement?.clientWidth || 300;
-      canvas.height = canvas.parentElement?.clientHeight || 300;
+      // Re-check canvas existence in case of weird lifecycle issues
+      if (!canvas) return;
+
       const { width, height } = canvas;
       const centerY = height / 2;
 
@@ -65,7 +82,19 @@ export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
     };
 
     render();
-    return () => cancelAnimationFrame(animationId);
+    
+    // Handle window resize cleanly
+    const handleResize = () => {
+        const dims = getDimensions();
+        canvas.width = dims.width;
+        canvas.height = dims.height;
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+        cancelAnimationFrame(animationId);
+        window.removeEventListener('resize', handleResize);
+    };
   }, []); // Empty dependency array ensures we only setup the loop once
 
   return <canvas ref={canvasRef} className="w-full h-full" />;

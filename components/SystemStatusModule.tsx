@@ -21,13 +21,18 @@ export const SystemStatusModule: React.FC = () => {
   });
 
   useEffect(() => {
-    // Battery API simulation
+    // Battery API simulation with Safety Check
     const updateBattery = async () => {
       try {
-        const battery: any = await (navigator as any).getBattery();
-        setStats(s => ({ ...s, batteryLevel: battery.level * 100, isCharging: battery.charging }));
-        battery.addEventListener('levelchange', () => setStats(s => ({ ...s, batteryLevel: battery.level * 100 })));
-      } catch { /* Fallback */ }
+        if ('getBattery' in navigator) {
+          const battery: any = await (navigator as any).getBattery();
+          setStats(s => ({ ...s, batteryLevel: battery.level * 100, isCharging: battery.charging }));
+          battery.addEventListener('levelchange', () => setStats(s => ({ ...s, batteryLevel: battery.level * 100 })));
+        }
+      } catch (e) { 
+        // Ignore battery API errors to prevent crash
+        console.warn("Battery status unavailable"); 
+      }
     };
     updateBattery();
 

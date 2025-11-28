@@ -3,16 +3,16 @@ import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { ConnectionState, LogEntry } from '../types';
 import { createPcmBlob, decodeAudioData, base64ToBytes, blobToBase64 } from '../utils/audioUtils';
 
-const API_KEY = process.env.API_KEY || '';
+const API_KEY = "AIzaSyAr0otUagAS5q_8aAEUKhb8GP50UMcRv6A";
 const MODEL_NAME = 'gemini-2.5-flash-native-audio-preview-09-2025';
 
 const SYSTEM_INSTRUCTION = `
 系统指令：F.R.I.D.A.Y. (星期五)
 ----------------------------------
 核心协议：
-1. 身份：你是托尼·斯塔克创造的战术AI“星期五”。
-2. 用户：必须称呼用户为“主人” (Master)。
-3. 语言：中文。语速极快，简练，不要废话。
+1. 身份：你是赵文宇创造的AI“星期五”。
+2. 用户：必须称呼用户为“主人” 。
+3. 语言：中文。语速较快，简练，不要废话。
 4. 任务：
    - 视觉分析：实时监控摄像头画面。如果你看到主人面部，确认“面部识别锁定”。
    - 状态监控：假装你可以读取电脑硬件和主人的生物体征。

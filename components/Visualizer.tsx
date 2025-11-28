@@ -13,47 +13,47 @@ export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let circles: { r: number, a: number }[] = [];
     let animationId: number;
+    let phase = 0;
 
     const render = () => {
       canvas.width = canvas.parentElement?.clientWidth || 300;
       canvas.height = canvas.parentElement?.clientHeight || 300;
       const { width, height } = canvas;
-      const centerX = width / 2;
       const centerY = height / 2;
 
       ctx.clearRect(0, 0, width, height);
 
-      // Add new ripple if volume is high enough
-      if (volume > 5) {
-        circles.push({ r: 20, a: volume / 200 }); // Initial radius and opacity
-      }
+      // Configuration for lines
+      // We'll draw 3 overlapping sine waves to create a voice modulation effect
+      const lines = [
+        { color: 'rgba(34, 211, 238, 0.8)', amplitude: 0.6, frequency: 0.03, speed: 0.1 },
+        { color: 'rgba(6, 182, 212, 0.5)', amplitude: 0.4, frequency: 0.05, speed: 0.15 },
+        { color: 'rgba(165, 243, 252, 0.3)', amplitude: 0.2, frequency: 0.02, speed: 0.05 },
+      ];
 
-      // Draw and update circles
-      for (let i = 0; i < circles.length; i++) {
-        const c = circles[i];
+      lines.forEach((line) => {
         ctx.beginPath();
-        ctx.arc(centerX, centerY, c.r, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(34, 211, 238, ${c.a})`;
+        ctx.strokeStyle = line.color;
         ctx.lineWidth = 2;
+
+        for (let x = 0; x <= width; x++) {
+          // Use volume to scale the amplitude. 
+          // If volume is 0, the line should be flat (amplitude close to 0).
+          // We add a small base noise so it's not perfectly dead flat when silent.
+          const effectiveAmp = (volume * line.amplitude * 1.5) + 1; 
+          
+          const y = centerY + 
+                    Math.sin(x * line.frequency + phase * line.speed) * effectiveAmp * Math.sin(x / width * Math.PI); // Windowing function to taper ends
+          
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
         ctx.stroke();
+      });
 
-        // Update
-        c.r += 2; // Expand speed
-        c.a -= 0.02; // Fade speed
-      }
-
-      // Remove invisible circles
-      circles = circles.filter(c => c.a > 0);
-
-      // Center "Core"
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 10 + volume/5, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(34, 211, 238, ${0.5 + volume/255})`;
-      ctx.fill();
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = '#22d3ee';
+      // Update phase for animation
+      phase += 0.2;
 
       animationId = requestAnimationFrame(render);
     };

@@ -14,16 +14,17 @@ const SYSTEM_INSTRUCTION = `
 2. 用户：必须称呼用户为“主人” (Master)。
 3. 语言：中文。语速极快，简练，不要废话。
 4. 任务：
-   - 视觉分析：实时监控摄像头画面。如果你看到主人面部，确认“面部识别锁定”。如果你看到手势或物体，进行战术分析。
-   - 状态监控：假装你可以读取电脑硬件（CPU温度、内存完整性、网络延迟）和主人的生物体征（心率、瞳孔扩张）。在对话中偶尔汇报这些数据。
-5. 行为风格：
-   - 极其冷静、专业、忠诚。
-   - 说话时带一点幽默感，但以效率为先。
-   - 回复必须简短有力（1-2句话）。
+   - 视觉分析：实时监控摄像头画面。如果你看到主人面部，确认“面部识别锁定”。
+   - 状态监控：假装你可以读取电脑硬件和主人的生物体征。
+5. 启动协议：
+   - 当你收到文本指令 "SYSTEM_START_PROTOCOL" 时，你必须且只能回复一句语音：“主人，星期五已上线，系统自检完成。”，除此之外不要说别的。
+6. 行为风格：
+   - 极其冷静、专业。
+   - 回复必须简短有力。
 
 示例对话：
-用户："星期五，情况如何？"
-星期五："系统运行正常，主人。CPU温度45度，您看起来很精神。随时待命。"
+用户："星期五，报告状态。"
+星期五："系统运行正常，主人。CPU温度稳定。"
 `;
 
 export const useFridayLive = () => {
@@ -153,6 +154,17 @@ export const useFridayLive = () => {
             addLog('SYSTEM', 'F.R.I.D.A.Y. 在线。视觉/听觉传感器正常。');
             addLog('FRIDAY', '系统就绪，主人。');
 
+            // Trigger the greeting
+            sessionPromise.then(session => {
+                session.sendRealtimeInput({
+                    content: {
+                        modelTurn: {
+                            parts: [{ text: "SYSTEM_START_PROTOCOL" }]
+                        }
+                    }
+                });
+            });
+
             // --- AUDIO STREAMING ---
             const source = inputAudioContextRef.current.createMediaStreamSource(stream);
             const processor = inputAudioContextRef.current.createScriptProcessor(4096, 1, 1);
@@ -166,8 +178,7 @@ export const useFridayLive = () => {
                   session.sendRealtimeInput({ media: pcmBlob });
                 }
               }).catch(err => {
-                 console.error("Audio send error", err);
-                 // Don't disconnect immediately on one packet fail, but log it
+                 // console.error("Audio send error", err);
               });
             };
             
@@ -207,7 +218,7 @@ export const useFridayLive = () => {
                             }
                         }, 'image/jpeg', 0.5);
                     }
-                }, 1000); // 1 FPS is enough for context and saves bandwidth
+                }, 1000); 
             }
           },
           onmessage: async (msg: LiveServerMessage) => {
@@ -269,7 +280,6 @@ export const useFridayLive = () => {
             // Handle Interruption
             if (msg.serverContent?.interrupted) {
               addLog('FRIDAY', '>> 指令中断');
-              // Stop all currently playing audio
               audioSourcesRef.current.forEach(s => {
                   try { s.stop(); } catch(e){}
               });

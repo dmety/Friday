@@ -6,7 +6,6 @@ import { createPcmBlob, decodeAudioData, base64ToBytes, blobToBase64 } from '../
 // Safely access API Key
 const getApiKey = () => {
   try {
-    // Check standard process.env
     if (typeof process !== 'undefined' && process.env?.API_KEY) {
       return process.env.API_KEY;
     }
@@ -43,7 +42,7 @@ export const useFridayLive = () => {
 
   // Connection Refs
   const isConnectedRef = useRef<boolean>(false);
-  const isStreamingReadyRef = useRef<boolean>(false); // New: Wait for connection stability
+  const isStreamingReadyRef = useRef<boolean>(false); 
 
   // Audio Contexts
   const inputAudioContextRef = useRef<AudioContext | null>(null);
@@ -182,17 +181,18 @@ export const useFridayLive = () => {
                      session.sendRealtimeInput({ media: pcmBlob });
                    } catch (e) {
                      // Silent fail on network blip
+                     console.warn("Audio packet drop", e);
                    }
                 }
               }).catch(() => {});
             };
             
-            // Stabilization Delay: Wait 1 second before sending data to prevent "Network Error" on cold socket
+            // Stabilization Delay: Wait 1 second before sending data
             setTimeout(() => {
-                if (isConnectedRef.current) {
+                if (isConnectedRef.current && inputAudioContextRef.current && inputAudioContextRef.current.state !== 'closed') {
                     source.connect(processor);
-                    processor.connect(inputAudioContextRef.current!.destination);
-                    isStreamingReadyRef.current = true; // Enable streaming
+                    processor.connect(inputAudioContextRef.current.destination);
+                    isStreamingReadyRef.current = true;
                     addLog('SYSTEM', '数据链路稳定。');
                 }
             }, 1000);
@@ -222,15 +222,19 @@ export const useFridayLive = () => {
                                     const base64Data = await blobToBase64(blob);
                                     sessionPromise.then(session => {
                                         if (isConnectedRef.current) {
-                                            session.sendRealtimeInput({
-                                                media: { data: base64Data, mimeType: 'image/jpeg' }
-                                            });
+                                            try {
+                                                session.sendRealtimeInput({
+                                                    media: { data: base64Data, mimeType: 'image/jpeg' }
+                                                });
+                                            } catch (e) {
+                                                console.warn("Video frame drop", e);
+                                            }
                                         }
                                     }).catch(() => {});
                                 }
                             }, 'image/jpeg', 0.5);
                         } catch (e) {
-                            // Canvas error
+                            console.error("Canvas error", e);
                         }
                     }
                 }, 1000); 
@@ -244,6 +248,11 @@ export const useFridayLive = () => {
             const base64Audio = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio) {
               try {
+                // Ensure context is running (browser autoplay policy)
+                if (ctx.state === 'suspended') {
+                    await ctx.resume();
+                }
+
                 const audioBuffer = await decodeAudioData(
                   base64ToBytes(base64Audio),
                   ctx,
@@ -285,7 +294,7 @@ export const useFridayLive = () => {
                   if (audioSourcesRef.current.size === 0) setVolume(0);
                 };
               } catch (e) {
-                // Audio decode error
+                console.error("Audio decode error", e);
               }
             }
 
@@ -305,12 +314,10 @@ export const useFridayLive = () => {
             cleanup();
           },
           onerror: (err) => {
-            // Only log if it's a real error, not just a disconnect
+            console.error("Session error", err);
             if (isConnectedRef.current) {
                 addLog('SYSTEM', '网络波动，正在重新校准...');
             }
-            // Don't auto-disconnect immediately on minor errors to allow recovery
-            // But if it's fatal, connectionState will update
           }
         }
       });

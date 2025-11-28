@@ -17,6 +17,8 @@ export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
+    
+    // Safety check to prevent crash if refs are null
     if (!canvas || !container) return;
     
     const ctx = canvas.getContext('2d');
@@ -24,19 +26,30 @@ export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
 
     let phase = 0;
 
-    // Use ResizeObserver for robust sizing without crashing
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.target === container) {
-            canvas.width = entry.contentRect.width;
-            canvas.height = entry.contentRect.height;
-        }
-      }
-    });
-
-    resizeObserver.observe(container);
+    // Robust ResizeObserver with fallback support check
+    let resizeObserver: ResizeObserver | null = null;
+    
+    if (typeof ResizeObserver !== 'undefined') {
+        resizeObserver = new ResizeObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.target === container) {
+                // Ensure canvas is still valid in closure
+                if (canvas) {
+                    canvas.width = entry.contentRect.width;
+                    canvas.height = entry.contentRect.height;
+                }
+            }
+          }
+        });
+        resizeObserver.observe(container);
+    } else {
+        // Fallback for very old browsers (unlikely but safe)
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+    }
 
     const render = () => {
+      // Re-check validity inside animation loop
       if (!canvas || !ctx) return;
       
       const width = canvas.width;
@@ -78,7 +91,9 @@ export const Visualizer: React.FC<VisualizerProps> = ({ volume }) => {
     render();
 
     return () => {
-      resizeObserver.disconnect();
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }

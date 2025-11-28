@@ -1,4 +1,8 @@
-import { Blob as GenAIBlob } from '@google/genai';
+// Define minimal interface locally to avoid import dependency issues
+export interface GenAIBlob {
+  data: string;
+  mimeType: string;
+}
 
 export function base64ToBytes(base64: string): Uint8Array {
   const binaryString = atob(base64);

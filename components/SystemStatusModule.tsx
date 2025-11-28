@@ -6,7 +6,7 @@ export const SystemStatusModule: React.FC = () => {
   const [stats, setStats] = useState<SystemStats>({
     batteryLevel: 100,
     isCharging: true,
-    online: typeof navigator !== 'undefined' ? navigator.onLine : true,
+    online: true,
     latitude: null,
     longitude: null,
     cpuLoad: 12,
@@ -21,28 +21,12 @@ export const SystemStatusModule: React.FC = () => {
   });
 
   useEffect(() => {
-    // Battery API simulation with Strict Safety Check
-    const updateBattery = async () => {
-      try {
-        // @ts-ignore - navigator.getBattery is not standard in all TS definitions
-        if (typeof navigator !== 'undefined' && navigator.getBattery) {
-          // @ts-ignore
-          const battery = await navigator.getBattery();
-          if (battery) {
-            setStats(s => ({ ...s, batteryLevel: battery.level * 100, isCharging: battery.charging }));
-            battery.addEventListener('levelchange', () => setStats(s => ({ ...s, batteryLevel: battery.level * 100 })));
-          }
-        }
-      } catch (e) { 
-        // Silently fail if battery API crashes
-      }
-    };
-    updateBattery();
-
+    // Pure simulation loop - Removed unstable Battery API calls
     const interval = setInterval(() => {
-      // Simulate fluctuating hardware stats
       setStats(prev => ({
         ...prev,
+        // Fluctuate battery slightly
+        batteryLevel: Math.max(98, prev.batteryLevel - (Math.random() > 0.9 ? 0.1 : 0)),
         cpuLoad: Math.min(100, Math.max(5, prev.cpuLoad + (Math.random() * 20 - 10))),
         memoryUsage: Math.min(100, Math.max(20, prev.memoryUsage + (Math.random() * 5 - 2.5)))
       }));
